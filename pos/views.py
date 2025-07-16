@@ -4,8 +4,27 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from datetime import timedelta
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 from .models import MenuItem, Order
 from .serializers import MenuItemSerializer, OrderSerializer
+
+class LoginView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        if not username or not password:
+            return Response({'detail': 'Username and password are required.'}, status=400)
+        user = authenticate(username=username, password=password)
+        if user is None:
+            return Response({'detail': 'Invalid credentials.'}, status=401)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
     
 class AvailableMenuItemsList(generics.ListAPIView):
     queryset = MenuItem.objects.filter(available_quantity__gt=0)

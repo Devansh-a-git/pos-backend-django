@@ -26,26 +26,20 @@ class OrderAdmin(admin.ModelAdmin):
     ordering = ("-timestamp",)
 
     def save_related(self, request, form, formsets, change):
-        # Enforce available_quantity logic for admin order creation
         from django.core.exceptions import ValidationError as DjangoValidationError
         order = form.instance
-        # Only check if this is a new order
         is_new = order.pk is None
         super().save_related(request, form, formsets, change)
-        # After inlines are saved, check all items
         if is_new:
             errors = []
             items = order.items.all()
-            # Check all items for stock
             for item in items:
                 menu_item = item.menu_item
                 if menu_item.available_quantity < item.quantity:
                     errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {item.quantity}')
             if errors:
-                # Roll back by deleting the just-saved order and its items
                 order.delete()
                 raise DjangoValidationError({'__all__': errors})
-            # Decrement stock
             for item in items:
                 menu_item = item.menu_item
                 menu_item.available_quantity -= item.quantity

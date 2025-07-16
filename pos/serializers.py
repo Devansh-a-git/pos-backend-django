@@ -27,7 +27,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # Only validate positive quantity here; order-level validation will check stock
         return attrs
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -42,7 +41,6 @@ class OrderSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items')
-        # Pre-check all quantities before making any changes
         errors = []
         for item_data in items_data:
             menu_item = item_data['menu_item']
@@ -51,7 +49,6 @@ class OrderSerializer(serializers.ModelSerializer):
                 errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {quantity}')
         if errors:
             raise serializers.ValidationError({'detail': errors})
-        # All checks passed, perform the updates
         order = Order.objects.create(**validated_data)
         for item_data in items_data:
             menu_item = item_data['menu_item']
