@@ -41,21 +41,25 @@ class OrderSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items')
-        errors = []
+        deduped = {}
         for item_data in items_data:
             menu_item = item_data['menu_item']
             quantity = item_data['quantity']
-            if menu_item.available_quantity < quantity:
-                errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {quantity}')
+            if menu_item in deduped:
+                deduped[menu_item] += quantity
+            else:
+                deduped[menu_item] = quantity
+        errors = []
+        for menu_item, total_quantity in deduped.items():
+            if menu_item.available_quantity < total_quantity:
+                errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {total_quantity}')
         if errors:
             raise serializers.ValidationError({'detail': errors})
         order = Order.objects.create(**validated_data)
-        for item_data in items_data:
-            menu_item = item_data['menu_item']
-            quantity = item_data['quantity']
-            menu_item.available_quantity -= quantity
+        for menu_item, total_quantity in deduped.items():
+            menu_item.available_quantity -= total_quantity
             menu_item.save()
-            OrderItem.objects.create(order=order, **item_data)
+            OrderItem.objects.create(order=order, menu_item=menu_item, quantity=total_quantity)
         return order
 
     def update(self, instance, validated_data):

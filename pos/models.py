@@ -24,6 +24,30 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} - {self.status}"
 
+    def process_items_and_inventory(self):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        # Deduplicate items: sum quantities for each menu_item
+        items = list(self.items.all())
+        deduped = {}
+        for item in items:
+            menu_item = item.menu_item
+            if menu_item in deduped:
+                deduped[menu_item].quantity += item.quantity
+                deduped[menu_item].save(update_fields=["quantity"])
+                item.delete()
+            else:
+                deduped[menu_item] = item
+        errors = []
+        for menu_item, item in deduped.items():
+            if menu_item.available_quantity < item.quantity:
+                errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {item.quantity}')
+        if errors:
+            self.delete()
+            raise DjangoValidationError({'__all__': errors})
+        for menu_item, item in deduped.items():
+            menu_item.available_quantity -= item.quantity
+            menu_item.save()
+
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     menu_item = models.ForeignKey(MenuItem, on_delete=models.PROTECT)

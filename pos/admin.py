@@ -8,7 +8,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ("id","name", "price", "available_quantity", "is_available")
+    list_display = ("name", "id", "price", "available_quantity", "is_available")
     list_filter = ("available_quantity",)
     search_fields = ("name",)
 
@@ -26,24 +26,10 @@ class OrderAdmin(admin.ModelAdmin):
     ordering = ("-timestamp",)
 
     def save_related(self, request, form, formsets, change):
-        from django.core.exceptions import ValidationError as DjangoValidationError
         order = form.instance
-        is_new = order.pk is None
         super().save_related(request, form, formsets, change)
-        if is_new:
-            errors = []
-            items = order.items.all()
-            for item in items:
-                menu_item = item.menu_item
-                if menu_item.available_quantity < item.quantity:
-                    errors.append(f'Not enough quantity for menu item "{menu_item.name}". Available: {menu_item.available_quantity}, Requested: {item.quantity}')
-            if errors:
-                order.delete()
-                raise DjangoValidationError({'__all__': errors})
-            for item in items:
-                menu_item = item.menu_item
-                menu_item.available_quantity -= item.quantity
-                menu_item.save()
+        if order.pk:
+            order.process_items_and_inventory()
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
